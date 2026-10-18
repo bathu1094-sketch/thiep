@@ -1,0 +1,653 @@
+<?php
+/**
+ * TRANG CHỦ THIỆP CHÚC MỪNG HOÀNG GIA (PHP + MYSQL)
+ * Được tải dữ liệu động từ Database MySQL trên InfinityFree
+ */
+require_once __DIR__ . '/config.php';
+
+// Tự động xác định Base URL của website để tránh lỗi 404 cho asset khi dùng rewrite slug
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)) ? "https://" : "http://";
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$siteDir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/');
+$baseUrl = $protocol . $host . ($siteDir !== '' ? $siteDir : '') . '/';
+
+// Xử lý gửi thư yêu thương qua AJAX
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'send_letter') {
+    header('Content-Type: application/json; charset=utf-8');
+    $sender = trim($_POST['sender_name'] ?? '');
+    $content = trim($_POST['content'] ?? '');
+
+    if (empty($content)) {
+        echo json_encode(['success' => false, 'message' => 'Vui lòng nhập nội dung thư!']);
+        exit;
+    }
+    if (empty($sender)) {
+        $sender = 'Người gửi ẩn danh 🌸';
+    }
+
+    $res = saveLetter($sender, $content);
+    echo json_encode([
+        'success' => $res,
+        'message' => $res ? 'Thư của bạn đã được gửi thành công đến người nhận! Cảm ơn bạn rất nhiều 💖' : 'Lỗi kết nối cơ sở dữ liệu.'
+    ]);
+    exit;
+}
+
+$settings = getAllSettings();
+$wishes = getAllWishes();
+
+// HỖ TRỢ LINK THIỆP RIÊNG TÙY CHỈNH: tenmien.com/?card=tenthiep hoặc tenmien.com/tenthiep
+$cardSlug = trim($_GET['card'] ?? $_GET['c'] ?? '');
+if ($cardSlug === '') {
+    $requestUriPath = trim(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH), '/');
+    if ($requestUriPath !== '' && $requestUriPath !== 'index.php' && !str_starts_with($requestUriPath, 'admin')) {
+        $segments = explode('/', $requestUriPath);
+        $lastSeg = end($segments);
+        if ($lastSeg !== 'index.php' && $lastSeg !== '') {
+            $cardSlug = $lastSeg;
+        }
+    }
+}
+
+$activeCardInfo = null;
+if ($cardSlug !== '') {
+    $customCard = getCustomCardBySlug($cardSlug);
+    if ($customCard) {
+        $activeCardInfo = $customCard;
+        if (!empty($customCard['settings']) && is_array($customCard['settings'])) {
+            $settings = array_merge($settings, $customCard['settings']);
+        }
+        if (!empty($customCard['wishes']) && is_array($customCard['wishes'])) {
+            $wishes = $customCard['wishes'];
+        }
+    }
+}
+
+// Kiểm tra đếm ngược mở cửa ban đầu: Chỉ hiện khung khi thời gian chưa tới (khi đến giờ sẽ biến mất hoàn toàn)
+$isCountdownActive = false;
+$counterEnabled = !isset($settings['event_counter_enabled']) || $settings['event_counter_enabled'] === '1' || $settings['event_counter_enabled'] === true || $settings['event_counter_enabled'] === 'true';
+if ($counterEnabled) {
+    $targetTimeTs = !empty($settings['event_counter_target_date']) ? strtotime($settings['event_counter_target_date']) : strtotime('2026-10-20 00:00:00');
+    $mode = $settings['event_counter_mode'] ?? 'auto';
+    if ($mode !== 'countup' && $targetTimeTs > time()) {
+        $isCountdownActive = true;
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title><?= htmlspecialchars($settings['card_title']) ?> - Thiệp Hoàng Gia</title>
+  <meta name="description" content="<?= htmlspecialchars($settings['card_subtitle']) ?>" />
+  <meta property="og:title" content="<?= htmlspecialchars($settings['card_title']) ?>" />
+  <meta property="og:description" content="<?= htmlspecialchars($settings['card_subtitle']) ?>" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@600;700&family=Great+Vibes&family=Montserrat:wght@400;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="stylesheet" href="tailwind.css?v=<?= time() ?>" />
+  <link rel="stylesheet" href="<?= htmlspecialchars($baseUrl) ?>tailwind.css?v=<?= time() ?>" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- External Stylesheet with Anti-Cache versioning -->
+  <link rel="stylesheet" href="<?= htmlspecialchars($baseUrl) ?>css.css?v=<?= time() ?>" />
+</head>
+<body class="min-h-screen overflow-hidden relative select-none" oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
+
+  <!-- ================= 1. CẢNH BÁO BẮT BUỘC QUAY NGANG ĐIỆN THOẠI ================= -->
+  <div id="rotate-screen-overlay" class="fixed inset-0 z-[100] bg-white flex items-center justify-center p-6 select-none">
+    <div class="relative flex items-center justify-center pointer-events-none">
+      <div class="w-32 h-60 sm:w-36 sm:h-64 rounded-[26px] bg-white border-[3.5px] border-black shadow-[0_12px_32px_rgba(0,0,0,0.12)] relative phone-turn-anim flex flex-col items-center overflow-hidden">
+        <div class="w-9 h-2.5 sm:w-10 sm:h-3 bg-black rounded-full mt-2.5 flex items-center justify-end px-1.5 shadow-sm">
+          <div class="w-1 h-1 rounded-full bg-[#1c1c1e] ring-1 ring-zinc-800"></div>
+        </div>
+        <div class="flex-1 w-full bg-white flex items-center justify-center text-xs text-zinc-400 font-medium text-center p-2">
+          Vui lòng xoay ngang màn hình
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Canvas hoa rơi & Canvas pháo hoa trái tim -->
+  <canvas id="petal-canvas"></canvas>
+  <canvas id="confettiCanvas"></canvas>
+  <div id="door-open-flash" class="door-open-flash"></div>
+
+  <!-- ================= 2. HỆ THỐNG HAI CÁNH CỬA (TẢI ĐỘNG TỪ MYSQL) ================= -->
+  <div id="door-container" class="fixed inset-0 z-50 flex overflow-hidden">
+    <!-- Cánh cửa trái: Đọc ảnh từ MySQL -->
+    <div id="left-door" class="door w-1/2 h-full shadow-2xl overflow-hidden border-r-2 border-amber-300"
+         style="background-image: url('<?= htmlspecialchars($settings['door_left_image']) ?>');">
+      <div class="absolute inset-4 border-2 border-amber-400/80 rounded-l-2xl pointer-events-none flex flex-col justify-between p-4 z-10">
+        <div class="flex justify-between text-amber-300 text-xl"><span>✦</span><span>✦</span></div>
+        <div class="flex justify-between text-amber-300 text-xl"><span>✦</span><span>✦</span></div>
+      </div>
+      <div class="floral-decor absolute inset-y-12 left-8 w-24 flex flex-col items-center justify-between pointer-events-none opacity-95 z-20">
+        <div class="text-rose-400 text-3xl"><i class="fa-solid fa-spa"></i></div>
+        <div class="text-pink-300 text-4xl"><i class="fa-solid fa-seedling"></i></div>
+        <div class="text-amber-300 text-3xl"><i class="fa-solid fa-fan"></i></div>
+        <div class="text-rose-400 text-4xl"><i class="fa-solid fa-spa"></i></div>
+      </div>
+      <div class="absolute right-6 top-1/2 -translate-y-1/2 w-3 h-36 bg-gradient-to-b from-amber-300 via-yellow-500 to-amber-600 rounded-full shadow-2xl border border-amber-200 z-20"></div>
+      <div class="door-lights"></div>
+      <div class="corner-flower tl"><i class="fa-solid fa-spa"></i></div>
+      <div class="corner-flower bl"><i class="fa-solid fa-spa"></i></div>
+      <div class="vine left">
+        <svg viewBox="0 0 150 500" preserveAspectRatio="none">
+          <path class="vine-path" d="M8 510 C35 430,5 360,45 300 C85 240,30 170,75 100 C95 70,105 35,130 5" />
+          <ellipse class="vine-leaf" cx="40" cy="380" rx="9" ry="18" transform="rotate(-35 40 380)" />
+          <ellipse class="vine-leaf" cx="70" cy="255" rx="9" ry="18" transform="rotate(-40 70 255)" />
+          <ellipse class="vine-leaf" cx="100" cy="100" rx="9" ry="18" transform="rotate(-30 100 100)" />
+        </svg>
+        <span class="vine-flower pink" style="left: 25px; bottom: 39%;"><i class="fa-solid fa-spa"></i></span>
+        <span class="vine-flower rose" style="left: 59px; bottom: 50%;"><i class="fa-solid fa-spa"></i></span>
+        <span class="vine-flower gold" style="left: 40px; bottom: 66%;"><i class="fa-solid fa-spa"></i></span>
+      </div>
+      <span class="sparkle-door" style="left: 32%; top: 24%;"></span>
+      <span class="sparkle-door" style="left: 72%; top: 42%;"></span>
+    </div>
+
+    <!-- Cánh cửa phải: Đọc ảnh từ MySQL -->
+    <div id="right-door" class="door w-1/2 h-full shadow-2xl overflow-hidden"
+         style="background-image: url('<?= htmlspecialchars($settings['door_right_image']) ?>');">
+      <div class="absolute inset-4 border-2 border-amber-400/80 rounded-r-2xl pointer-events-none flex flex-col justify-between p-4 z-10">
+        <div class="flex justify-between text-amber-300 text-xl"><span>✦</span><span>✦</span></div>
+        <div class="flex justify-between text-amber-300 text-xl"><span>✦</span><span>✦</span></div>
+      </div>
+      <div class="floral-decor absolute inset-y-12 right-8 w-24 flex flex-col items-center justify-between pointer-events-none opacity-95 z-20" style="animation-direction: reverse;">
+        <div class="text-amber-300 text-3xl"><i class="fa-solid fa-fan"></i></div>
+        <div class="text-rose-400 text-4xl"><i class="fa-solid fa-spa"></i></div>
+        <div class="text-pink-300 text-4xl"><i class="fa-solid fa-seedling"></i></div>
+      </div>
+      <div class="absolute left-6 top-1/2 -translate-y-1/2 w-3 h-36 bg-gradient-to-b from-amber-300 via-yellow-500 to-amber-600 rounded-full shadow-2xl border border-amber-200 z-20"></div>
+      <div class="door-lights"></div>
+      <div class="corner-flower tr"><i class="fa-solid fa-spa"></i></div>
+      <div class="corner-flower br"><i class="fa-solid fa-spa"></i></div>
+      <div class="vine right">
+        <svg viewBox="0 0 150 500" preserveAspectRatio="none">
+          <path class="vine-path" d="M8 510 C35 430,5 360,45 300 C85 240,30 170,75 100 C95 70,105 35,130 5" />
+          <ellipse class="vine-leaf" cx="40" cy="380" rx="9" ry="18" transform="rotate(-35 40 380)" />
+          <ellipse class="vine-leaf" cx="70" cy="255" rx="9" ry="18" transform="rotate(-40 70 255)" />
+          <ellipse class="vine-leaf" cx="100" cy="100" rx="9" ry="18" transform="rotate(-30 100 100)" />
+        </svg>
+        <span class="vine-flower pink" style="left: 25px; bottom: 39%;"><i class="fa-solid fa-spa"></i></span>
+        <span class="vine-flower rose" style="left: 59px; bottom: 50%;"><i class="fa-solid fa-spa"></i></span>
+        <span class="vine-flower gold" style="left: 40px; bottom: 66%;"><i class="fa-solid fa-spa"></i></span>
+      </div>
+      <span class="sparkle-door" style="right: 32%; top: 24%;"></span>
+      <span class="sparkle-door" style="right: 72%; top: 42%;"></span>
+    </div>
+
+    <!-- Nút trái tim giữa cánh cửa kèm Bộ đếm ngược thời gian mở thiệp -->
+    <div id="heart-wrapper" class="absolute inset-0 z-[60] flex flex-col items-center justify-center select-none pointer-events-auto">
+      
+      <!-- BỘ ĐẾM NGƯỢC THỜI GIAN MỞ THIỆP NGAY TẠI MÀN HÌNH MỞ ĐẦU -->
+      <?php 
+        $counterEnabled = !isset($settings['event_counter_enabled']) || $settings['event_counter_enabled'] === '1' || $settings['event_counter_enabled'] === true || $settings['event_counter_enabled'] === 'true';
+        $targetDateStr = $settings['event_counter_target_date'] ?? '2026-10-20T00:00';
+        $targetTimePhp = strtotime($targetDateStr);
+        $mode = $settings['event_counter_mode'] ?? 'auto';
+        // Nếu đã đến giờ mở thiệp (thời gian đã qua) thì làm mất luôn khung đếm ngược
+        $isTimeArrivedPhp = ($mode !== 'countdown' && $targetTimePhp && time() >= $targetTimePhp);
+      ?>
+      <?php if ($counterEnabled): ?>
+      <div id="doorCountdownWidget" class="door-countdown-widget mb-3 sm:mb-4<?= $isTimeArrivedPhp ? ' hidden' : '' ?>" onclick="handleDoorCountdownClick(event)" title="Chạm để xem thời gian mở thiệp ✨" <?= $isTimeArrivedPhp ? 'style="display:none;"' : '' ?>>
+        <div class="door-countdown-badge">
+          <i class="fa-solid fa-hourglass-half text-amber-300"></i>
+          <span id="doorCounterBadgeText"><?= htmlspecialchars($settings['event_counter_badge'] ?? 'Đếm Ngược Mở Thiệp ⏳') ?></span>
+        </div>
+
+        <div id="doorCounterTitleText" class="door-countdown-title">
+          <?= htmlspecialchars($settings['event_counter_title'] ?? 'Thiệp Sẽ Mở Vào Ngày 20-10 🌸') ?>
+        </div>
+        
+        <!-- 4 Ô ĐẾM THỜI GIAN THỰC (NGÀY, GIỜ, PHÚT, GIÂY) -->
+        <div id="doorCounterUnitsWrap" class="door-counter-units">
+          <div class="door-unit-box">
+            <span class="door-unit-val" id="doorCntDays">00</span>
+            <span class="door-unit-lbl">Ngày</span>
+          </div>
+          <span class="door-unit-sep">:</span>
+          <div class="door-unit-box">
+            <span class="door-unit-val" id="doorCntHours">00</span>
+            <span class="door-unit-lbl">Giờ</span>
+          </div>
+          <span class="door-unit-sep">:</span>
+          <div class="door-unit-box">
+            <span class="door-unit-val" id="doorCntMinutes">00</span>
+            <span class="door-unit-lbl">Phút</span>
+          </div>
+          <span class="door-unit-sep">:</span>
+          <div class="door-unit-box">
+            <span class="door-unit-val" id="doorCntSeconds">00</span>
+            <span class="door-unit-lbl">Giây</span>
+          </div>
+        </div>
+      </div>
+      <?php endif; ?>
+
+      <button id="open-heart-btn" class="heart-btn w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-tr from-rose-600 via-pink-500 to-amber-400 rounded-full flex items-center justify-center text-white text-3xl sm:text-4xl shadow-2xl hover:scale-110 active:scale-95 transition-transform border-2 border-amber-200" title="Chạm để mở cửa thiệp">
+        <i id="heart-btn-icon" class="fa-solid fa-heart drop-shadow-md"></i>
+      </button>
+
+      <!-- BẢNG BÁO KHI BẤM VÀO TRÁI TIM KHI CHƯA ĐẾN GIỜ -->
+      <div id="doorLockNotice" class="door-lock-notice hidden">
+        <i class="fa-solid fa-clock text-amber-300 mr-1.5"></i>
+        <span id="doorLockNoticeText"><?= htmlspecialchars($settings['event_counter_message'] ?? 'Chưa đến giờ mở thiệp! Hãy đợi hết thời gian đếm ngược nhé ⏳') ?></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal nhập mã PIN (Đọc ảnh đại diện, tiêu đề từ MySQL) -->
+  <div id="pin-modal" class="fixed inset-0 z-[70] cat-modal-bg flex items-center justify-center p-3 sm:p-4 hidden" onclick="if(event.target===this) closePinModal(event)">
+    <div id="pin-modal-box" class="bg-gradient-to-b from-pink-900/95 via-rose-950/95 to-slate-900/95 border-2 border-pink-400/50 rounded-3xl p-5 md:p-8 max-w-sm w-full text-center shadow-[0_0_35px_rgba(244,63,94,0.4)] relative select-none" onclick="event.stopPropagation()">
+      
+      <div class="modal-landscape-left">
+        <div class="cat-bounce mb-3 w-16 h-16 sm:w-20 sm:h-20 mx-auto rounded-full overflow-hidden border-2 border-pink-300 shadow-[0_0_15px_rgba(244,114,182,0.8)]">
+          <img src="<?= htmlspecialchars($settings['pin_avatar_image']) ?>" alt="Avatar" class="w-full h-full object-cover" />
+        </div>
+        <h3 class="font-vibes text-3xl sm:text-4xl text-pink-200 mb-1"><?= htmlspecialchars($settings['pin_title']) ?></h3>
+        <p id="pin-instruction" class="text-xs text-pink-200/80 mb-4 font-light"><?= htmlspecialchars($settings['pin_subtitle']) ?></p>
+        
+        <!-- 4 ô mã PIN tối ưu phản hồi tức thì -->
+        <div id="pin-dots-container" class="flex justify-center gap-2.5 sm:gap-3 mb-4">
+          <div class="pin-dot" data-idx="0"><i class="pin-paw-icon fa-solid fa-paw opacity-30 text-sm"></i></div>
+          <div class="pin-dot" data-idx="1"><i class="pin-paw-icon fa-solid fa-paw opacity-30 text-sm"></i></div>
+          <div class="pin-dot" data-idx="2"><i class="pin-paw-icon fa-solid fa-paw opacity-30 text-sm"></i></div>
+          <div class="pin-dot" data-idx="3"><i class="pin-paw-icon fa-solid fa-paw opacity-30 text-sm"></i></div>
+        </div>
+      </div>
+
+      <!-- Bàn phím số phản hồi siêu mượt -->
+      <div class="modal-landscape-right">
+        <div class="grid grid-cols-3 gap-2 sm:gap-3 max-w-[240px] mx-auto">
+          <button type="button" data-key="1" class="pin-btn h-10 sm:h-12 rounded-xl bg-white/15 hover:bg-pink-500/30 border border-pink-300/30 text-white font-semibold text-base sm:text-lg">1</button>
+          <button type="button" data-key="2" class="pin-btn h-10 sm:h-12 rounded-xl bg-white/15 hover:bg-pink-500/30 border border-pink-300/30 text-white font-semibold text-base sm:text-lg">2</button>
+          <button type="button" data-key="3" class="pin-btn h-10 sm:h-12 rounded-xl bg-white/15 hover:bg-pink-500/30 border border-pink-300/30 text-white font-semibold text-base sm:text-lg">3</button>
+          <button type="button" data-key="4" class="pin-btn h-10 sm:h-12 rounded-xl bg-white/15 hover:bg-pink-500/30 border border-pink-300/30 text-white font-semibold text-base sm:text-lg">4</button>
+          <button type="button" data-key="5" class="pin-btn h-10 sm:h-12 rounded-xl bg-white/15 hover:bg-pink-500/30 border border-pink-300/30 text-white font-semibold text-base sm:text-lg">5</button>
+          <button type="button" data-key="6" class="pin-btn h-10 sm:h-12 rounded-xl bg-white/15 hover:bg-pink-500/30 border border-pink-300/30 text-white font-semibold text-base sm:text-lg">6</button>
+          <button type="button" data-key="7" class="pin-btn h-10 sm:h-12 rounded-xl bg-white/15 hover:bg-pink-500/30 border border-pink-300/30 text-white font-semibold text-base sm:text-lg">7</button>
+          <button type="button" data-key="8" class="pin-btn h-10 sm:h-12 rounded-xl bg-white/15 hover:bg-pink-500/30 border border-pink-300/30 text-white font-semibold text-base sm:text-lg">8</button>
+          <button type="button" data-key="9" class="pin-btn h-10 sm:h-12 rounded-xl bg-white/15 hover:bg-pink-500/30 border border-pink-300/30 text-white font-semibold text-base sm:text-lg">9</button>
+          <button type="button" id="pin-clear" class="pin-action-btn h-10 sm:h-12 rounded-xl bg-rose-500/20 hover:bg-rose-500/40 border border-rose-300/30 text-rose-300 font-medium text-xs">Xóa</button>
+          <button type="button" data-key="0" class="pin-btn h-10 sm:h-12 rounded-xl bg-white/15 hover:bg-pink-500/30 border border-pink-300/30 text-white font-semibold text-base sm:text-lg">0</button>
+          <button type="button" id="pin-del" class="pin-action-btn h-10 sm:h-12 rounded-xl bg-amber-500/20 hover:bg-amber-500/40 border border-amber-300/30 text-amber-300 font-medium text-xs">Lùi</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 3. TOÀN BỘ KHÔNG GIAN SAU CÁNH CỬA ================= -->
+  <div class="bg-glow-top"></div>
+  <div class="bg-glow-bottom"></div>
+
+  <!-- NÚT GỬI THƯ GÓC TRÁI (CHỈ HIỆN KHI ĐÃ MỞ CỬA) -->
+  <div class="top-left-controls" id="letterControlWrap">
+    <button class="btn-send-letter" id="openLetterBtn" title="Gửi thư / lời chúc yêu thương" aria-label="Gửi thư" onclick="openLetterModal(event)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <rect width="20" height="16" x="2" y="4" rx="2" />
+        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+      </svg>
+    </button>
+  </div>
+
+  <!-- NÚT PHÁO HOA GÓC PHẢI -->
+  <div class="top-controls">
+    <button class="btn-icon-only" id="fireworkBtn" title="Bắn pháo hoa trái tim" aria-label="Bắn pháo hoa" onclick="triggerManualFirework(event)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2v4" />
+        <path d="M12 18v4" />
+        <path d="m4.93 4.93 2.83 2.83" />
+        <path d="m16.24 16.24 2.83 2.83" />
+        <path d="M2 12h4" />
+        <path d="M18 12h4" />
+        <path d="m4.93 19.07 2.83-2.83" />
+        <path d="m16.24 7.76 2.83-2.83" />
+      </svg>
+    </button>
+  </div>
+
+  <!-- KHUNG CHÚC MỪNG (DỮ LIỆU ĐỘNG TỪ MYSQL) -->
+  <div class="card-container">
+    <div class="greeting-card" onclick="triggerCardFirework(event)">
+      <div class="card-shimmer"></div>
+      <svg class="star-sparkle star-tl" width="16" height="16" viewBox="0 0 24 24" fill="#f43f5e"><path d="M12 0L14.5 9.5L24 12L14.5 14.5L12 24L9.5 14.5L0 12L9.5 9.5L12 0Z"/></svg>
+      <svg class="star-sparkle star-tr" width="15" height="15" viewBox="0 0 24 24" fill="#fb7185"><path d="M12 0L14.5 9.5L24 12L14.5 14.5L12 24L9.5 14.5L0 12L9.5 9.5L12 0Z"/></svg>
+      <svg class="star-sparkle star-bl" width="14" height="14" viewBox="0 0 24 24" fill="#facc15"><path d="M12 0L14.5 9.5L24 12L14.5 14.5L12 24L9.5 14.5L0 12L9.5 9.5L12 0Z"/></svg>
+      <svg class="star-sparkle star-br" width="15" height="15" viewBox="0 0 24 24" fill="#f472b6"><path d="M12 0L14.5 9.5L24 12L14.5 14.5L12 24L9.5 14.5L0 12L9.5 9.5L12 0Z"/></svg>
+
+      <h1 class="card-title"><?= htmlspecialchars($settings['card_title']) ?></h1>
+      <p class="card-subtitle">
+        <span><?= htmlspecialchars($settings['card_subtitle']) ?></span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="#f43f5e"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+      </p>
+    </div>
+  </div>
+
+  <!-- Quà & Thư rơi liên tục -->
+  <div class="falling-layer" id="fallingContainer"></div>
+
+  <!-- BƯỚM 3D TƯƠNG TÁC -->
+  <div id="butterflyEl" title="Bướm hoa 🦋✨" onmouseenter="handleButterflyHover(event)" onclick="handleButterflyClick(event)">
+    <div class="bf-flight" style="perspective: 500px;">
+      <svg width="40" height="34" viewBox="0 0 44 36" fill="none" style="filter: drop-shadow(0 4px 10px rgba(244,114,182,0.6));">
+        <defs>
+          <linearGradient id="bfMainWingL" x1="1" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#fef08a"/><stop offset="35%" stop-color="#f472b6"/><stop offset="75%" stop-color="#e11d48"/><stop offset="100%" stop-color="#c084fc"/>
+          </linearGradient>
+          <linearGradient id="bfMainWingR" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#fef08a"/><stop offset="35%" stop-color="#f472b6"/><stop offset="75%" stop-color="#e11d48"/><stop offset="100%" stop-color="#c084fc"/>
+          </linearGradient>
+          <linearGradient id="bfLowerWing" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f472b6"/><stop offset="100%" stop-color="#a855f7"/>
+          </linearGradient>
+        </defs>
+        <g class="bf-wing-l">
+          <path d="M21 16 C14 5 2 3 3 12 C4 20 15 19 21 19 Z" fill="url(#bfMainWingL)" />
+          <path d="M21 19 C15 24 6 28 8 33 C10 37 18 31 21 21 Z" fill="url(#bfLowerWing)" opacity="0.9" />
+          <circle cx="11" cy="10" r="1.5" fill="#ffffff" opacity="0.95" />
+        </g>
+        <g class="bf-wing-r">
+          <path d="M23 16 C30 5 42 3 41 12 C40 20 29 19 23 19 Z" fill="url(#bfMainWingR)" />
+          <path d="M23 19 C29 24 38 28 36 33 C34 37 26 31 23 21 Z" fill="url(#bfLowerWing)" opacity="0.9" />
+          <circle cx="33" cy="10" r="1.5" fill="#ffffff" opacity="0.95" />
+        </g>
+        <ellipse cx="22" cy="19" rx="1.8" ry="7.5" fill="#581c87" />
+        <circle cx="22" cy="10.5" r="1.8" fill="#4a044e" />
+      </svg>
+    </div>
+  </div>
+
+  <!-- BÓ HOA TRUNG TÂM -->
+  <div class="center-scene">
+    <svg id="bouquetSvg" class="bouquet-svg" viewBox="0 0 600 540" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="petalGradCenter" cx="45%" cy="40%" r="60%">
+          <stop offset="0%" stop-color="#fff5f7" />
+          <stop offset="45%" stop-color="#ff9ebb" />
+          <stop offset="100%" stop-color="#f43f5e" />
+        </radialGradient>
+        <radialGradient id="petalGradSoft" cx="45%" cy="40%" r="60%">
+          <stop offset="0%" stop-color="#ffffff" />
+          <stop offset="50%" stop-color="#fda4af" />
+          <stop offset="100%" stop-color="#fb7185" />
+        </radialGradient>
+        <radialGradient id="petalGradPink" cx="45%" cy="40%" r="60%">
+          <stop offset="0%" stop-color="#ffffff" />
+          <stop offset="45%" stop-color="#fbcfe8" />
+          <stop offset="100%" stop-color="#e11d48" />
+        </radialGradient>
+        <radialGradient id="flowerCenterGlow" cx="45%" cy="40%" r="55%">
+          <stop offset="0%" stop-color="#ffffff" />
+          <stop offset="30%" stop-color="#fef08a" />
+          <stop offset="70%" stop-color="#facc15" />
+          <stop offset="100%" stop-color="#ea580c" />
+        </radialGradient>
+
+        <linearGradient id="mainStemGrad" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stop-color="#14532d" />
+          <stop offset="35%" stop-color="#16a34a" />
+          <stop offset="80%" stop-color="#22c55e" />
+          <stop offset="100%" stop-color="#86efac" />
+        </linearGradient>
+        <linearGradient id="sideStemGrad" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stop-color="#166534" />
+          <stop offset="40%" stop-color="#22c55e" />
+          <stop offset="100%" stop-color="#4ade80" />
+        </linearGradient>
+        <linearGradient id="calyxGrad" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stop-color="#15803d" />
+          <stop offset="100%" stop-color="#4ade80" />
+        </linearGradient>
+        <linearGradient id="leafGradDark" x1="0" y1="1" x2="0.8" y2="0">
+          <stop offset="0%" stop-color="#14532d" stop-opacity="0.9" />
+          <stop offset="60%" stop-color="#15803d" stop-opacity="0.85" />
+          <stop offset="100%" stop-color="#4ade80" stop-opacity="0.6" />
+        </linearGradient>
+        <linearGradient id="leafGradMid" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0%" stop-color="#166534" stop-opacity="0.85" />
+          <stop offset="70%" stop-color="#22c55e" stop-opacity="0.75" />
+          <stop offset="100%" stop-color="#86efac" stop-opacity="0.5" />
+        </linearGradient>
+        <radialGradient id="bouquetBaseGlow" cx="50%" cy="100%" r="60%">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
+          <stop offset="50%" stop-color="#fbcfe8" stop-opacity="0.35" />
+          <stop offset="100%" stop-color="#ffffff" stop-opacity="0.95" />
+        </radialGradient>
+      </defs>
+
+      <ellipse cx="300" cy="490" rx="180" ry="60" fill="url(#bouquetBaseGlow)" />
+
+      <!-- Cành Trái -->
+      <g class="branch-sway-l">
+        <path d="M300 490 Q 210 380 140 245" stroke="url(#sideStemGrad)" stroke-width="6.5" stroke-linecap="round" />
+        <path d="M210 380 Q 170 365 160 335 Q 195 355 210 380" fill="url(#leafGradMid)" />
+        <path d="M300 490 Q 235 340 200 165" stroke="url(#mainStemGrad)" stroke-width="7" stroke-linecap="round" />
+        <path d="M245 320 Q 215 285 200 250 Q 235 280 245 320" fill="url(#leafGradDark)" />
+        <path d="M300 490 Q 275 270 245 90" stroke="url(#mainStemGrad)" stroke-width="7.5" stroke-linecap="round" />
+        <path d="M275 250 Q 240 210 230 160 Q 265 200 275 250" fill="url(#leafGradMid)" />
+
+        <g transform="translate(140, 245) rotate(-38)">
+          <path d="M0 8 C-12 18 -18 26 -14 34 C-6 26 0 16 0 8 Z" fill="url(#calyxGrad)" />
+          <path d="M0 8 C12 18 18 26 14 34 C6 26 0 16 0 8 Z" fill="url(#calyxGrad)" />
+          <ellipse cx="0" cy="-22" rx="17" ry="13" fill="url(#petalGradSoft)" />
+          <ellipse cx="20" cy="-9" rx="16" ry="13" transform="rotate(35, 20, -9)" fill="url(#petalGradSoft)" />
+          <ellipse cx="14" cy="17" rx="16" ry="12" transform="rotate(75, 14, 17)" fill="url(#petalGradSoft)" />
+          <ellipse cx="-14" cy="17" rx="16" ry="12" transform="rotate(-75, -14, 17)" fill="url(#petalGradSoft)" />
+          <ellipse cx="-20" cy="-9" rx="16" ry="13" transform="rotate(-35, -20, -9)" fill="url(#petalGradSoft)" />
+          <circle cx="0" cy="0" r="12" fill="#ffffff" opacity="0.92" />
+          <circle cx="0" cy="0" r="9" fill="url(#flowerCenterGlow)" />
+        </g>
+
+        <g transform="translate(200, 165) rotate(-24)">
+          <path d="M0 10 C-14 20 -20 30 -16 38 C-8 30 0 18 0 10 Z" fill="url(#calyxGrad)" />
+          <path d="M0 10 C14 20 20 30 16 38 C8 30 0 18 0 10 Z" fill="url(#calyxGrad)" />
+          <ellipse cx="0" cy="-24" rx="19" ry="14" fill="url(#petalGradPink)" />
+          <ellipse cx="22" cy="-10" rx="18" ry="14" transform="rotate(35, 22, -10)" fill="url(#petalGradPink)" />
+          <ellipse cx="15" cy="19" rx="18" ry="13" transform="rotate(75, 15, 19)" fill="url(#petalGradPink)" />
+          <ellipse cx="-15" cy="19" rx="18" ry="13" transform="rotate(-75, -15, 19)" fill="url(#petalGradPink)" />
+          <ellipse cx="-22" cy="-10" rx="18" ry="14" transform="rotate(-35, -22, -10)" fill="url(#petalGradPink)" />
+          <circle cx="0" cy="0" r="13" fill="#ffffff" opacity="0.92" />
+          <circle cx="0" cy="0" r="10" fill="url(#flowerCenterGlow)" />
+        </g>
+
+        <g transform="translate(245, 90) rotate(-12)">
+          <path d="M0 10 C-15 22 -22 32 -18 40 C-8 32 0 20 0 10 Z" fill="url(#calyxGrad)" />
+          <path d="M0 10 C15 22 22 32 18 40 C8 32 0 20 0 10 Z" fill="url(#calyxGrad)" />
+          <ellipse cx="0" cy="-24" rx="19" ry="14" fill="url(#petalGradCenter)" />
+          <ellipse cx="22" cy="-10" rx="18" ry="14" transform="rotate(35, 22, -10)" fill="url(#petalGradCenter)" />
+          <ellipse cx="15" cy="19" rx="18" ry="13" transform="rotate(75, 15, 19)" fill="url(#petalGradCenter)" />
+          <ellipse cx="-15" cy="19" rx="18" ry="13" transform="rotate(-75, -15, 19)" fill="url(#petalGradCenter)" />
+          <ellipse cx="-22" cy="-10" rx="18" ry="14" transform="rotate(-35, -22, -10)" fill="url(#petalGradCenter)" />
+          <circle cx="0" cy="0" r="13" fill="#ffffff" opacity="0.95" />
+          <circle cx="0" cy="0" r="10" fill="url(#flowerCenterGlow)" />
+        </g>
+      </g>
+
+      <!-- Cành Giữa Đồng Bộ Mềm Mại -->
+      <g class="branch-sway-c">
+        <path d="M300 490 Q 296 260 300 70" stroke="url(#mainStemGrad)" stroke-width="7.5" stroke-linecap="round" />
+        
+        <path d="M298 210 Q 255 185 235 150 Q 275 180 298 210" fill="url(#leafGradMid)" />
+        <path d="M302 230 Q 345 205 365 170 Q 325 200 302 230" fill="url(#leafGradDark)" />
+        <path d="M298 320 Q 260 300 245 270 Q 280 290 298 320" fill="url(#leafGradMid)" />
+        <path d="M302 340 Q 340 320 355 290 Q 320 310 302 340" fill="url(#leafGradDark)" />
+
+        <!-- Hoa giữa dưới -->
+        <path d="M298 440 Q 312 360 300 280" stroke="url(#sideStemGrad)" stroke-width="6" stroke-linecap="round" />
+        <g transform="translate(300, 275)">
+          <path d="M0 10 C-15 22 -22 32 -18 40 C-8 32 0 20 0 10 Z" fill="url(#calyxGrad)" />
+          <path d="M0 10 C15 22 22 32 18 40 C8 32 0 20 0 10 Z" fill="url(#calyxGrad)" />
+          <ellipse cx="0" cy="-24" rx="19" ry="14" fill="url(#petalGradPink)" />
+          <ellipse cx="22" cy="-10" rx="18" ry="14" transform="rotate(35, 22, -10)" fill="url(#petalGradPink)" />
+          <ellipse cx="15" cy="19" rx="18" ry="13" transform="rotate(75, 15, 19)" fill="url(#petalGradPink)" />
+          <ellipse cx="-15" cy="19" rx="18" ry="13" transform="rotate(-75, -15, 19)" fill="url(#petalGradPink)" />
+          <ellipse cx="-22" cy="-10" rx="18" ry="14" transform="rotate(-35, -22, -10)" fill="url(#petalGradPink)" />
+          <circle cx="0" cy="0" r="13" fill="#ffffff" opacity="0.95" />
+          <circle cx="0" cy="0" r="10" fill="url(#flowerCenterGlow)" />
+        </g>
+
+        <!-- Hoa giữa đỉnh -->
+        <g transform="translate(300, 70)">
+          <path d="M0 10 C-15 22 -22 32 -18 40 C-8 32 0 20 0 10 Z" fill="url(#calyxGrad)" />
+          <path d="M0 10 C15 22 22 32 18 40 C8 32 0 20 0 10 Z" fill="url(#calyxGrad)" />
+          <ellipse cx="0" cy="-26" rx="20" ry="15" fill="url(#petalGradCenter)" />
+          <ellipse cx="24" cy="-11" rx="19" ry="15" transform="rotate(35, 24, -11)" fill="url(#petalGradCenter)" />
+          <ellipse cx="16" cy="21" rx="19" ry="14" transform="rotate(75, 16, 21)" fill="url(#petalGradCenter)" />
+          <ellipse cx="-16" cy="21" rx="19" ry="14" transform="rotate(-75, -16, 21)" fill="url(#petalGradCenter)" />
+          <ellipse cx="-24" cy="-11" rx="19" ry="15" transform="rotate(-35, -24, -11)" fill="url(#petalGradCenter)" />
+          <circle cx="0" cy="0" r="14" fill="#ffffff" opacity="0.95" />
+          <circle cx="0" cy="0" r="10.5" fill="url(#flowerCenterGlow)" />
+        </g>
+      </g>
+
+      <!-- Cành Phải -->
+      <g class="branch-sway-r">
+        <path d="M300 490 Q 325 270 355 90" stroke="url(#mainStemGrad)" stroke-width="7.5" stroke-linecap="round" />
+        <path d="M325 250 Q 360 210 370 160 Q 335 200 325 250" fill="url(#leafGradMid)" />
+        <path d="M300 490 Q 365 340 400 165" stroke="url(#mainStemGrad)" stroke-width="7" stroke-linecap="round" />
+        <path d="M355 320 Q 385 285 400 250 Q 365 280 355 320" fill="url(#leafGradDark)" />
+        <path d="M300 490 Q 390 380 460 245" stroke="url(#sideStemGrad)" stroke-width="6.5" stroke-linecap="round" />
+        <path d="M390 380 Q 430 365 440 335 Q 405 355 390 380" fill="url(#leafGradMid)" />
+
+        <g transform="translate(355, 90) rotate(12)">
+          <path d="M0 10 C-15 22 -22 32 -18 40 C-8 32 0 20 0 10 Z" fill="url(#calyxGrad)" />
+          <path d="M0 10 C15 22 22 32 18 40 C8 32 0 20 0 10 Z" fill="url(#calyxGrad)" />
+          <ellipse cx="0" cy="-24" rx="19" ry="14" fill="url(#petalGradCenter)" />
+          <ellipse cx="22" cy="-10" rx="18" ry="14" transform="rotate(35, 22, -10)" fill="url(#petalGradCenter)" />
+          <ellipse cx="15" cy="19" rx="18" ry="13" transform="rotate(75, 15, 19)" fill="url(#petalGradCenter)" />
+          <ellipse cx="-15" cy="19" rx="18" ry="13" transform="rotate(-75, -15, 19)" fill="url(#petalGradCenter)" />
+          <ellipse cx="-22" cy="-10" rx="18" ry="14" transform="rotate(-35, -22, -10)" fill="url(#petalGradCenter)" />
+          <circle cx="0" cy="0" r="13" fill="#ffffff" opacity="0.95" />
+          <circle cx="0" cy="0" r="10" fill="url(#flowerCenterGlow)" />
+        </g>
+
+        <g transform="translate(400, 165) rotate(24)">
+          <path d="M0 10 C-14 20 -20 30 -16 38 C-8 30 0 18 0 10 Z" fill="url(#calyxGrad)" />
+          <path d="M0 10 C14 20 20 30 16 38 C8 30 0 18 0 10 Z" fill="url(#calyxGrad)" />
+          <ellipse cx="0" cy="-24" rx="19" ry="14" fill="url(#petalGradPink)" />
+          <ellipse cx="22" cy="-10" rx="18" ry="14" transform="rotate(35, 22, -10)" fill="url(#petalGradPink)" />
+          <ellipse cx="15" cy="19" rx="18" ry="13" transform="rotate(75, 15, 19)" fill="url(#petalGradPink)" />
+          <ellipse cx="-15" cy="19" rx="18" ry="13" transform="rotate(-75, -15, 19)" fill="url(#petalGradPink)" />
+          <ellipse cx="-22" cy="-10" rx="18" ry="14" transform="rotate(-35, -22, -10)" fill="url(#petalGradPink)" />
+          <circle cx="0" cy="0" r="13" fill="#ffffff" opacity="0.92" />
+          <circle cx="0" cy="0" r="10" fill="url(#flowerCenterGlow)" />
+        </g>
+
+        <g transform="translate(460, 245) rotate(38)">
+          <path d="M0 8 C-12 18 -18 26 -14 34 C-6 26 0 16 0 8 Z" fill="url(#calyxGrad)" />
+          <path d="M0 8 C12 18 18 26 14 34 C6 26 0 16 0 8 Z" fill="url(#calyxGrad)" />
+          <ellipse cx="0" cy="-22" rx="17" ry="13" fill="url(#petalGradSoft)" />
+          <ellipse cx="20" cy="-9" rx="16" ry="13" transform="rotate(35, 20, -9)" fill="url(#petalGradSoft)" />
+          <ellipse cx="14" cy="17" rx="16" ry="12" transform="rotate(75, 14, 17)" fill="url(#petalGradSoft)" />
+          <ellipse cx="-14" cy="17" rx="16" ry="12" transform="rotate(-75, -14, 17)" fill="url(#petalGradSoft)" />
+          <ellipse cx="-20" cy="-9" rx="16" ry="13" transform="rotate(-35, -20, -9)" fill="url(#petalGradSoft)" />
+          <circle cx="0" cy="0" r="12" fill="#ffffff" opacity="0.92" />
+          <circle cx="0" cy="0" r="9" fill="url(#flowerCenterGlow)" />
+        </g>
+      </g>
+    </svg>
+
+    <!-- Mèo con nhảy bắt bướm -->
+    <div class="cat-wrapper">
+      <div id="catSpeech" class="cat-bubble"></div>
+      <div id="catBox" class="cat-box" onclick="catCheerAction(event)" onmouseenter="triggerCatchButterfly(); soundMeow();" title="Bé mèo nhảy bắt bướm 🐾">
+        <img id="catImg" class="cat-img" src="https://panbap.github.io/WomensDay/assets/mewmew.gif" alt="Bé mèo" />
+        <div id="catShadow" class="cat-shadow"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hoa mọc dưới đất -->
+  <div class="bottom-flowers-row" id="groundFlowers"></div>
+
+  <!-- Modal Hộp Lời Chúc (Rộng rãi, ảnh lớn, bấm ra ngoài để tắt) -->
+  <div id="giftModal" class="modal-overlay" onclick="closeGiftModal(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-top-bar">
+        <div id="giftModalRecipient" class="modal-recipient-pill">
+          <span>🌸</span>
+          <span id="giftModalRecipientText">Gửi Vợ yêu thương</span>
+        </div>
+      </div>
+      
+      <div class="modal-img-wrap">
+        <img id="giftModalImg" src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500" alt="Portrait" />
+      </div>
+
+      <p id="giftModalMsg" class="modal-msg">Chúc mẹ luôn dồi dào sức khỏe, ngập tràn niềm vui và luôn mỉm cười hạnh phúc bên gia đình!</p>
+
+      <div class="modal-tap-hint">
+        <span>🐾 Chạm ra ngoài khoảng trống để đóng thiệp</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL GỬI THƯ YÊU THƯƠNG ĐẾN CHỦ NHÂN THIỆP -->
+  <div id="sendLetterModal" class="modal-overlay" onclick="closeLetterModal(event)">
+    <div class="modal-letter-box" onclick="event.stopPropagation()">
+      <div class="modal-letter-header">
+        <div class="modal-letter-badge">
+          <i class="fa-solid fa-heart text-rose-500"></i>
+          <span><?= htmlspecialchars($settings['letter_modal_title'] ?? 'Hộp Thư Yêu Thương') ?></span>
+        </div>
+      </div>
+
+      <p class="modal-letter-sub"><?= htmlspecialchars($settings['letter_modal_subtitle'] ?? 'Hãy để lại tên và những lời chúc, cảm nghĩ ngọt ngào của bạn nhé! Lời nhắn sẽ được gửi thẳng về trang quản trị 💌') ?></p>
+
+      <form id="sendLetterForm" onsubmit="handleSendLetterSubmit(event)" class="modal-letter-form">
+        <div class="input-group">
+          <label for="senderNameInput"><?= htmlspecialchars($settings['letter_sender_label'] ?? 'Tên hoặc Biệt danh của bạn:') ?></label>
+          <input type="text" id="senderNameInput" required placeholder="<?= htmlspecialchars($settings['letter_sender_placeholder'] ?? 'Ví dụ: Bé Út, Bạn thân, Người giấu tên...') ?>" maxlength="60" />
+        </div>
+
+        <div class="input-group">
+          <label for="letterContentInput"><?= htmlspecialchars($settings['letter_content_label'] ?? 'Nội dung lời nhắn gửi trao:') ?></label>
+          <textarea id="letterContentInput" required rows="4" placeholder="<?= htmlspecialchars($settings['letter_content_placeholder'] ?? 'Viết những lời yêu thương, cảm xúc hoặc điều bạn muốn nói tại đây...') ?>"></textarea>
+        </div>
+
+        <button type="submit" id="btnSubmitLetter" class="btn-submit-letter">
+          <i class="fa-solid fa-paper-plane"></i>
+          <span id="btnSubmitLetterText"><?= htmlspecialchars($settings['letter_submit_btn_text'] ?? 'Gửi Thư Ngay 💖') ?></span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Nhạc nền MP3 lãng mạn (Đọc đường dẫn từ MySQL/Settings) -->
+  <?php
+    $finalMusicUrl = '';
+    $onlineDefault = !empty($settings['bg_music_online_url']) ? $settings['bg_music_online_url'] : 'https://assets.mixkit.co/music/preview/mixkit-romantic-moment-588.mp3';
+
+    if (!empty($settings['bg_music_type']) && $settings['bg_music_type'] === 'url' && !empty($settings['bg_music_online_url'])) {
+        $finalMusicUrl = $settings['bg_music_online_url'];
+    } elseif (!empty($settings['bg_music_url']) && (str_starts_with($settings['bg_music_url'], 'http://') || str_starts_with($settings['bg_music_url'], 'https://'))) {
+        $finalMusicUrl = $settings['bg_music_url'];
+    } elseif (!empty($settings['bg_music_file']) && file_exists(__DIR__ . '/' . $settings['bg_music_file'])) {
+        $finalMusicUrl = $baseUrl . $settings['bg_music_file'];
+    } elseif (!empty($settings['bg_music_url']) && file_exists(__DIR__ . '/' . $settings['bg_music_url'])) {
+        $finalMusicUrl = $baseUrl . $settings['bg_music_url'];
+    } else {
+        $finalMusicUrl = $onlineDefault;
+    }
+  ?>
+  <audio id="bgMusic" src="<?= htmlspecialchars($finalMusicUrl) ?>" preload="auto" loop playsinline></audio>
+
+  <!-- DỮ LIỆU ĐỘNG PHP TRUYỀN XUỐNG JAVASCRIPT -->
+  <script>
+    window.BASE_URL = '<?= $baseUrl ?>';
+    window.SERVER_SETTINGS = <?= json_encode($settings, JSON_UNESCAPED_UNICODE) ?>;
+    window.SERVER_WISHES = <?= json_encode($wishes, JSON_UNESCAPED_UNICODE) ?>;
+  </script>
+
+  <!-- External Script with Anti-Cache versioning -->
+  <script src="<?= htmlspecialchars($baseUrl) ?>script.js?v=<?= time() ?>"></script>
+</body>
+</html>

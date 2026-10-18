@@ -1,0 +1,58 @@
+[
+  {
+    "id": 1,
+    "recipient": "Gửi Mẹ yêu dấu",
+    "msg": "Chúc mẹ ngày 20-10 luôn dồi dào sức khỏe, ngập tràn niềm vui và luôn mỉm cười hạnh phúc bên gia đình!",
+    "img": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&auto=format&fit=crop&q=80",
+    "sort_order": 1
+  },
+  {
+    "id": 2,
+    "recipient": "Gửi Người thương",
+    "msg": "Chúc em một ngày 20/10 ngọt ngào, rực rỡ và luôn nở nụ cười xinh đẹp nhất trên môi!",
+    "img": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
+    "sort_order": 2
+  },
+  {
+    "id": 3,
+    "recipient": "Gửi Vợ yêu thương",
+    "msg": "Cảm ơn em đã luôn là hậu phương ấm áp, người bạn đời tuyệt vời. Chúc vợ 20-10 ngập tràn hạnh phúc và luôn an yên!",
+    "img": "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=500&auto=format&fit=crop&q=80",
+    "sort_order": 3
+  },
+  {
+    "id": 4,
+    "recipient": "Gửi Cô giáo kính yêu",
+    "msg": "Kính chúc Cô ngày 20/10 thật nhiều niềm vui, sức khỏe và luôn tràn đầy nhiệt huyết dìu dắt bao thế hệ học trò!",
+    "img": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80",
+    "sort_order": 4
+  },
+  {
+    "id": 5,
+    "recipient": "Gửi Chị / Em gái",
+    "msg": "Chúc chị/em ngày càng xinh đẹp, tự tin, công việc hanh thông và đón nhận vạn điều may mắn!",
+    "img": "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500&auto=format&fit=crop&q=80",
+    "sort_order": 5
+  },
+  {
+    "id": 6,
+    "recipient": "Gửi Bạn thân",
+    "msg": "Chúc bạn 20/10 rạng ngời, tiền vô như nước, luôn yêu đời và sớm có người thương cưng chiều nhé!",
+    "img": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500&auto=format&fit=crop&q=80",
+    "sort_order": 6
+  },
+  {
+    "id": 7,
+    "recipient": "Gửi Nữ đồng nghiệp",
+    "msg": "Chúc phái đẹp văn phòng ngày 20/10 luôn tươi trẻ, công việc thuận lợi, nhiều năng lượng và rạng rỡ mỗi ngày!",
+    "img": "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=500&auto=format&fit=crop&q=80",
+    "sort_order": 7
+  },
+  {
+    "id": 8,
+    "recipient": "Dành trọn yêu thương",
+    "msg": "Cảm ơn những hy sinh thầm lặng của phái đẹp. Chúc một nửa thế giới luôn được trân trọng, bình an và hạnh phúc!",
+    "img": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500&auto=format&fit=crop&q=80",
+    "sort_order": 8
+  }
+]

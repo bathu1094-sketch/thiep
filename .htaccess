@@ -1,0 +1,23 @@
+# Cấu hình máy chủ Apache / InfinityFree
+DirectoryIndex index.php index.html
+
+# Ngăn duyệt danh sách thư mục
+Options -Indexes
+
+# Bật mã hóa UTF-8 chuẩn
+AddDefaultCharset UTF-8
+
+# Bật Rewrite URL thân thiện: cho phép truy cập tenmien.com/tenthiep hoặc tenmien.com/?card=tenthiep
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Bỏ qua thư mục admin và các file thật (như css.css, tailwind.css, script.js, 1.mp3, ...)
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  RewriteRule ^admin(/.*)?$ - [L]
+
+  # Chuyển hướng tenmien.com/tenthiep sang index.php?card=$1
+  RewriteRule ^([a-zA-Z0-9_-]+)/?$ index.php?card=$1 [L,QSA]
+</IfModule>

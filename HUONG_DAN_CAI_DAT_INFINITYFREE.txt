@@ -1,0 +1,51 @@
+========================================================================
+HƯỚNG DẪN CÀI ĐẶT THIỆP HOÀNG GIA LÊN HOSTING INFINITYFREE (A - Z)
+========================================================================
+
+BƯỚC 1: TẢI VÀ GIẢI NÉN MÃ NGUỒN
+- Toàn bộ các file trong file ZIP này là mã nguồn hoàn chỉnh của trang thiệp và hệ thống quản trị.
+- Mở Control Panel của InfinityFree -> Chọn "Online File Manager" (hoặc kết nối qua FTP/FileZilla).
+- Mở thư mục "htdocs" của tên miền bạn muốn chạy.
+- Tải lên (Upload) và giải nén toàn bộ các file trong thư mục này ngay tại thư mục "htdocs":
+  + index.php
+  + config.php
+  + database.sql
+  + api_send_letter.php
+  + css.css
+  + script.js
+  + tailwind.css
+  + .htaccess
+  + settings.json
+  + custom_cards.json
+  + wishes.json
+  + letters.json
+  + thư mục admin/ (chứa index.php, login.php, auth.php, logout.php, tailwind.css)
+
+BƯỚC 2: CẤU HÌNH DATABASE MYSQL TRÊN INFINITYFREE
+- Trong cPanel của InfinityFree, vào mục "MySQL Databases".
+- Tạo một Database mới (ví dụ: carddb).
+- Lấy các thông số kết nối:
+  + MySQL Hostname (ví dụ: sql200.infinityfree.com)
+  + Database Name (ví dụ: if0_12345678_carddb)
+  + MySQL Username (ví dụ: if0_12345678)
+  + MySQL Password (mật khẩu tài khoản hosting của bạn)
+- Mở file "config.php" trên hosting và điền 4 thông số trên vào các dòng:
+  define('DB_HOST', 'sql200.infinityfree.com');
+  define('DB_NAME', 'if0_12345678_carddb');
+  define('DB_USER', 'if0_12345678');
+  define('DB_PASS', 'mat_khau_cua_ban');
+
+BƯỚC 3: NHẬP DATABASE (IMPORT DATABASE.SQL)
+- Trong cPanel, chọn "phpMyAdmin" và nhấn "Connect" vào database bạn vừa tạo.
+- Bấm vào tab "Import" ở thanh menu trên cùng.
+- Chọn file "database.sql" từ máy tính của bạn và bấm "Go" (Thực hiện).
+- Toàn bộ bảng cài đặt (settings), lời chúc (wishes), hòm thư (letters), và thiệp tùy chỉnh (custom_cards) sẽ được khởi tạo đầy đủ.
+
+* LƯU Ý ĐẶC BIỆT:
+- Ngay cả khi bạn chưa cấu hình Database, hệ thống vẫn hoạt động 100% nhờ cơ chế tự động đọc dữ liệu dự phòng từ settings.json, custom_cards.json, wishes.json!
+- Đường dẫn truy cập trang thiệp chính: http://tenmien-cua-ban.com/
+- Đường dẫn truy cập thiệp theo link riêng: http://tenmien-cua-ban.com/tang-me hoặc http://tenmien-cua-ban.com/?card=tang-me
+- Đường dẫn vào trang quản trị: http://tenmien-cua-ban.com/admin/ (Mật khẩu 6 số mặc định: 123456).
+- Để đổi mật khẩu admin, bạn có thể chỉnh sửa dòng: define('ADMIN_PASSWORD', '123456'); trong file config.php.
+
+Chúc bạn có một trang thiệp thật đẹp, lãng mạn và ý nghĩa! 🌸💖
