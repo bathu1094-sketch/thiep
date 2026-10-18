@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "php -S 0.0.0.0:${PORT:-5173}"
+    "dev": "php -S 0.0.0.0:${PORT:-5173} -t ."
   },
   "devDependencies": {
     "vite": "^6.1.0"
