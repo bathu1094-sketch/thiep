@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quản Trị - Thiệp Hoàng Gia</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tailwind.css" />
+  <style>
+    body { font-family: Quicksand, sans-serif; }
+    .font-comfortaa { font-family: Comfortaa, sans-serif; }
+    .glass { background: rgba(15, 23, 42, .86); backdrop-filter: blur(18px); }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <main class="min-h-screen flex items-center justify-center p-4">
+    <section id="loginView" class="glass w-full max-w-sm rounded-3xl border border-pink-500/30 p-6 sm:p-8 text-center shadow-2xl">
+      <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-rose-500 to-amber-400 text-2xl shadow-lg">🔒</div>
+      <h1 class="font-comfortaa text-xl font-bold text-pink-100">Mật Khẩu Quản Trị</h1>
+      <p class="mt-1 mb-5 text-xs text-pink-300/70">Nhập mã 6 số để vào bảng điều khiển</p>
+      <p id="loginError" class="mb-4 hidden rounded-xl border border-rose-400/40 bg-rose-500/20 p-3 text-xs font-semibold text-rose-200">Mật khẩu không đúng.</p>
+      <form id="loginForm" class="space-y-4">
+        <input id="pinInput" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" required autofocus placeholder="••••••" class="w-full rounded-2xl border-2 border-pink-400/50 bg-slate-950 px-4 py-3 text-center text-2xl font-bold tracking-[.4em] text-pink-300 outline-none focus:border-pink-400" />
+        <button class="w-full rounded-xl bg-gradient-to-r from-rose-500 via-pink-500 to-amber-500 py-3 text-sm font-bold text-white shadow-lg">Mở Bảng Quản Trị</button>
+      </form>
+      <a href="../" class="mt-6 block border-t border-slate-800 pt-4 text-xs text-slate-400 hover:text-pink-300">← Về Trang Thiệp</a>
+    </section>
+
+    <section id="dashboardView" class="glass hidden w-full max-w-3xl rounded-3xl border border-pink-500/30 p-5 sm:p-8 shadow-2xl">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-700 pb-5">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-[.2em] text-pink-300">Preview</p>
+          <h1 class="font-comfortaa mt-1 text-2xl font-bold text-pink-100">Bảng Điều Khiển Quản Trị</h1>
+        </div>
+        <button id="logoutButton" class="rounded-xl border border-slate-600 px-4 py-2 text-sm text-slate-300 hover:border-pink-400 hover:text-pink-200">Đăng xuất</button>
+      </div>
+      <div class="mt-6 grid gap-4 sm:grid-cols-3">
+        <div class="rounded-2xl border border-slate-700 bg-slate-900/70 p-5"><p class="text-xs text-slate-400">Tiêu đề thiệp</p><p id="cardTitle" class="mt-2 font-semibold text-pink-100">Đang tải...</p></div>
+        <div class="rounded-2xl border border-slate-700 bg-slate-900/70 p-5"><p class="text-xs text-slate-400">Số lời chúc</p><p id="wishCount" class="mt-2 text-2xl font-bold text-amber-300">0</p></div>
+        <div class="rounded-2xl border border-slate-700 bg-slate-900/70 p-5"><p class="text-xs text-slate-400">Chế độ</p><p class="mt-2 font-semibold text-emerald-300">Xem trước</p></div>
+      </div>
+      <div class="mt-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm leading-6 text-amber-100">Bạn đang xem bản quản trị trong Preview. Các thay đổi dữ liệu cần trang PHP trên hosting thật để lưu lại.</div>
+      <div class="mt-6 flex flex-wrap gap-3">
+        <a href="../" class="rounded-xl bg-gradient-to-r from-rose-500 to-amber-500 px-5 py-3 text-sm font-bold text-white">Mở trang thiệp</a>
+        <button id="reloadData" class="rounded-xl border border-pink-400/40 px-5 py-3 text-sm font-semibold text-pink-200 hover:bg-pink-500/10">Tải lại dữ liệu</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const loginView = document.getElementById('loginView');
+    const dashboardView = document.getElementById('dashboardView');
+    const loginError = document.getElementById('loginError');
+    const pinInput = document.getElementById('pinInput');
+
+    function showDashboard() {
+      loginView.classList.add('hidden');
+      dashboardView.classList.remove('hidden');
+      loadData();
+    }
+
+    function loadData() {
+      Promise.all([
+        fetch('../settings.json').then((response) => response.json()).catch(() => ({})),
+        fetch('../wishes.json').then((response) => response.json()).catch(() => [])
+      ]).then(([settings, wishes]) => {
+        document.getElementById('cardTitle').textContent = settings.card_title || 'Chúc Mừng Một Nửa Thế Giới';
+        document.getElementById('wishCount').textContent = Array.isArray(wishes) ? wishes.length : 0;
+      });
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (pinInput.value === '123456') {
+        sessionStorage.setItem('admin_preview_logged_in', '1');
+        showDashboard();
+      } else {
+        loginError.classList.remove('hidden');
+        pinInput.select();
+      }
+    });
+
+    document.getElementById('logoutButton').addEventListener('click', () => {
+      sessionStorage.removeItem('admin_preview_logged_in');
+      dashboardView.classList.add('hidden');
+      loginView.classList.remove('hidden');
+      pinInput.value = '';
+      pinInput.focus();
+    });
+
+    document.getElementById('reloadData').addEventListener('click', loadData);
+    if (sessionStorage.getItem('admin_preview_logged_in') === '1') showDashboard();
+  </script>
+</body>
+</html>
